@@ -1,0 +1,88 @@
+name: Run
+run-name: ${{ inputs.tag }}
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Bundle identity
+        required: true
+        type: string
+      shards:
+        description: Parts (1 to 4)
+        required: true
+        default: '1'
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: batch-${{ inputs.tag }}
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash
+jobs:
+  plan:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - id: plan
+        env:
+          COUNT: ${{ inputs.shards }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          count = int(os.environ['COUNT'])
+          assert 1 <= count <= 4
+          assert re.fullmatch(r'r[0-9a-f]{24}', os.environ['TAG'])
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('matrix=' + json.dumps(list(range(count))) + '\n')
+          PY
+  work:
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+      - run: python -m pip install --disable-pip-version-check cryptography==42.0.8
+      - run: python -B -m unittest -q test_worker
+      - name: Work
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BOX_KEY: ${{ secrets.BOX_KEY }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+          SHARD: ${{ matrix.shard }}
+        run: python -B worker.py --repo "$REPO" --tag "$TAG" --shard "$SHARD" --out "$RUNNER_TEMP/work" --transport artifact
+      - name: Index
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: i-${{ inputs.tag }}-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/work/export-index/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
+      - name: Output
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: o-${{ inputs.tag }}-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/work/export-full/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
