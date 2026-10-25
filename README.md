@@ -7,8 +7,9 @@ one assigned part with a fixed time limit, and return encrypted output.
 Workload diagnostics are captured inside the encrypted result. Public receipts
 contain opaque identities and generic completion status.
 
-Execution requires an explicit dispatch on the main branch. At most four parts
-run concurrently. Outputs expire after three days. There are no scheduled runs.
+Execution requires an explicit dispatch on the main branch. A batch contains at
+most 40 parts, subject to the owner's account concurrency limit. Outputs expire
+after three days. There are no scheduled runs.
 
 The payload environment excludes provider credentials. This worker is designed
 for trusted owner-authored software, not hostile programs. Execution timing,

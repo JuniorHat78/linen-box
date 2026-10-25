@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       shards:
-        description: Parts (1 to 4)
+        description: Parts (1 to 40)
         required: true
         default: '1'
         type: string
@@ -16,7 +16,7 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: work
+  group: work-${{ inputs.tag }}
   cancel-in-progress: false
 defaults:
   run:
@@ -37,7 +37,7 @@ jobs:
           python3 - <<'PY'
           import json, os, re
           count = int(os.environ['COUNT'])
-          assert 1 <= count <= 4
+          assert 1 <= count <= 40
           assert re.fullmatch(r'r[0-9a-f]{24}', os.environ['TAG'])
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
               f.write('matrix=' + json.dumps(list(range(count))) + '\n')
@@ -48,7 +48,7 @@ jobs:
     timeout-minutes: 150
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 40
       matrix:
         shard: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
